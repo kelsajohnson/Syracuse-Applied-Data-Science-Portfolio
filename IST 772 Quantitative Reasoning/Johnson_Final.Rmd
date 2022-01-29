@@ -1,0 +1,349 @@
+---
+Heading: "IST772, Standard Homework Heading"
+student name: "Kelsey Johnson"
+Homework Number: "Final Examination"
+Due date: "6/27/2021"
+Attribution Statement: "I did this homework by myself, with help from the book and the professor"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+# IST772, Standard Homework Heading
+# Student name: Kelsey Johnson
+# Homework number: Final Examination
+# Date due: 6/27/21
+# Attribution statement: (choose only one)
+# I did this homework by myself, with help from the book
+```{r}
+# Run these three functions to get a clean test of homework code
+dev.off() # Clear the graph window
+cat('\014')  # Clear the console
+rm(list=ls()) # Clear user objects from the environment
+# Set working directory 
+setwd("C:/Users/HP/OneDrive/Desktop/Grad School/IST772 Quantitative Reasoning/Week 10/Final") # Change to the folder containing your homework data files
+```
+
+The datasets are:
+
+•	usVaccines.Rdata
+•	allSchoolsReportStatus.RData
+•	districtsX.RData
+
+Here is a description of each dataset:
+
+usVaccines.Rdata – Time series data from the World Health Organization reporting vaccination rates in the U.S. for five common vaccines
+
+Time-Series [1:38, 1:5] from 1980 to 2017: 
+ - attr(*, "dimnames")=List of 2
+  ..$ : NULL
+  ..$ : chr [1:5] "DTP1" "HepB_BD" "Pol3" "Hib3" “MCV1”... 
+
+(Note: DTP1 = First dose of Diphtheria/Pertussis/Tetanus vaccine; HepB_BD = Hepatitis B, Birth Dose; Pol3 = Polio third dose; Hib3 – Influenza third dose; MCV1 = Measles first dose) 
+
+allSchoolsReportStatus.RData – A list of California kindergartens and whether they reported vaccination data to the state in 2013
+
+'data.frame':	7381 obs. of  3 variables:
+ $ name    : Name of the school
+ $ pubpriv : “PUBLIC” or “PRIVATE”
+ $ reported: “Y” or “N”
+
+districtsX.RData – (Where X is the number of your particular dataset) A sample of California public school districts from the 2013 data collection, along with specific numbers and percentages for each district: 
+
+'data.frame':	700 obs. of  13 variables:
+ $ DistrictName    : Name of the district
+ $ WithoutDTP      : Percentage of students without the DTP vaccine
+ $ WithoutPolio    : Percentage of students without the Polio vaccine
+ $ WithoutMMR      : Percentage of students without the MMR vaccine
+ $ WithoutHepB     : Percentage of students without the Hepatitis B vaccine
+ $ PctUpToDate     : Percentage of all enrolled students with completely up-to-date vaccines
+ $ DistrictComplete: Boolean indicating whether or not the district’s reporting was complete
+ $ PctBeliefExempt : Percentage of all enrolled students with belief exceptions
+ $ PctChildPoverty : Percentage of children in the district living below the poverty line
+ $ PctFreeMeal     : Percentage of children in the district eligible for free student meals
+ $ PctFamilyPoverty: num  Percentage of families in the district living below the poverty line
+ $ Enrolled        : Total number of enrolled students in the district
+ $ TotalSchools    : Total number of different schools in the district
+
+
+#Research Questions:
+
+## Question 1
+
+How have U.S. vaccination rates varied over time?
+
+Are vaccination rates increasing or decreasing?
+
+Which vaccination has the highest rate at the conclusion of the time series?
+
+Which vaccination has the lowest rate at the conclusion of the time series?
+
+Which vaccine has the greatest volatility?
+
+```{r}
+load("usVaccines.RData")
+load("allSchoolsReportStatus.RData")
+load("districts13.RData")
+library(changepoint)
+finalVac<-usVaccines
+str(finalVac)
+summary(finalVac)
+plot(finalVac)
+cor(finalVac)
+acf(finalVac[,"DTP1"],)
+acf(finalVac[,"HepB_BD"])
+acf(finalVac[,"Pol3"])
+acf(finalVac[,"Hib3"])
+acf(finalVac[,"MCV1"])
+plot(cpt.var(finalVac[,"Pol3"]))
+plot(cpt.mean(finalVac[,"Pol3"]))
+```
+
+Vaccine rates in general have trended higher since 1980 year over year with some variability.  However, DTP1, POL3 and Hib3 all continued growing until around 2000 and have remained fairly steady except for a small dip in Hib3 around 2010.  HepB_BD had continued to increase through 2010 and began to decrease slightly afterwards.  By running an autocorrelation analysis on the individual vaccines we can see the strength and whether a trend is present.  3 of the vaccines (DTP1, HepB_BD, and Hib3) all show a trend.  They also have the strongest correlation with DTP1 and HepB_BD having the highest at 0.5905157.  
+
+MCV1 had a large amount of vulnerability between 1987 when it dropped to a count of 82 and rose to a count of 98 by 1988.  Then it had another dip beginning in 1989 through 1991 before it finally began to increase and remain steady since 2000 with a count of 90-93 until the end of our data. Overall vaccine rates are increasing. DTP1 had the highest rate in 2017 at the end of our data at 98.  HepB_BD had the lowest rate at conclusion with 64.  POL3 had the greatest volatility with the lowest count being 24 and highest count being 97 (range of 73). The changepoint analysis visuals show where the difference in variance and mean values shifted.
+
+
+## Question 2
+
+What proportion of public schools reported vaccination data?
+
+What proportion of private schools reported vaccination data?
+
+Was there any credible difference in overall reporting proportions between public and private schools?
+
+```{r}
+#allSchoolsReportStatus
+schoolstatus<-allSchoolsReportStatus
+#schoolstatus
+str(schoolstatus)
+schoolvaccines<-matrix(c(252,1397,148,5584), ncol=2, byrow=TRUE)
+colnames(schoolvaccines)<-c("No", "Yes")
+rownames(schoolvaccines)<-c("PRIVATE", "Public")
+schoolvaccines<-as.table(schoolvaccines)
+#schoolvaccines
+#vaccine grand total
+margin.table(schoolvaccines)
+#marginal row totals
+margin.table(schoolvaccines,1)
+#marginal column totals
+margin.table(schoolvaccines,2)
+#Find vaccine probabilities
+schoolprobs<-schoolvaccines/margin.table(schoolvaccines)
+schoolprobs
+#Total Probability of No vs Yes
+schoolmargins<-margin.table(schoolvaccines,2)/margin.table(schoolvaccines)
+schoolmargins
+#Total Probability of Public vs Private
+schoolmargins2<-margin.table(schoolvaccines,1)/margin.table(schoolvaccines)
+schoolmargins2
+barplot(schoolvaccines)
+
+```
+
+Public schools reported a proportion of 77.66% (0.7765885)  while private schools reported a proportion of 22.34% (0.2234115) from the total of 7381 schools.  There is a large difference in reporting between public and private schools.  For private schools, 15.28% of the total of private schools reported No for vaccines while 84.7% reported yes.  For public schools, only 2.58% reported No for vaccines with 97.42% reporting yes.  This is a gap of 12.72% when comparing private and public schools who reported vaccination data.  The total reporting of both private and public is 94.6% while total of 5.4% of both schools did not report vaccinations.
+
+
+## Question 3
+
+What are 2013 vaccination rates for individual vaccines in California public schools?
+
+How do these rates for individual vaccines in California districts compare with overall US vaccination rates (make an informal comparison to the final observations in the time series)?
+
+
+```{r}
+summary(finalVac)
+#districts
+californiaschools<-districts
+str(districts)
+summary(districts)
+#California Totals
+DTP<-1-(sum(californiaschools$WithoutDTP)/sum(californiaschools$Enrolled))
+DTP
+Polio<-1-(sum(californiaschools$WithoutPolio)/sum(californiaschools$Enrolled))
+Polio
+MMR<-1-(sum(californiaschools$WithoutMMR)/sum(californiaschools$Enrolled))
+MMR
+HepB<-1-(sum(californiaschools$WithoutHepB)/sum(californiaschools$Enrolled))
+HepB
+#total up to date
+sum(californiaschools$PctUpToDate)
+#Total Enrolled
+sum(californiaschools$Enrolled)
+#Total Without DTP
+sum(californiaschools$WithoutDTP)
+#Total Without Polio
+sum(californiaschools$WithoutPolio)
+#Total Without MMR
+sum(californiaschools$WithoutPolio)
+#Total Without HepB
+sum(californiaschools$WithoutPolio)
+#Comparison of US to CA
+california<-c(98.4, 98.4, 98.4, 98.8)
+us<-c(94.05, 87.16, 91.24, 34.21)
+comparison<-data.frame(california, us)
+comparison
+```
+
+The 2013 rates for individual vaccines in public schools are 98.4% for DTP, Polio, and MMR while HepB is 98.8%.  These rates are higher than the average US vaccination rates for all 4 vaccines.  The largest difference coming from HepB which California has a rate of 98.8% while the US is only at 34.21%.  There are 5.7% of students in California who have not been vaccinated due to a belief exemption.  One reason why California is higher than the rest of the US appears to be because they require all children who attend private or public schools to be vaccinated.  There are several states who offer medical, religious and philosophical exemptions which can cause the overall US rate to decline.
+
+
+## Question 4
+
+Among districts, how are the vaccination rates for individual vaccines related? In other words, if students are missing one vaccine are they missing all of the others?
+ 
+```{r}
+str(californiaschools)
+summary(californiaschools)
+#transform District to Num and drop DistrictName
+californiaschools$DistrictComplete <- ifelse(californiaschools$DistrictComplete == "F",1,ifelse(californiaschools$DistrictComplete == "T",2,0))
+newcaliforniaschools<-californiaschools[c(-1, -6:-13)]
+str(newcaliforniaschools)
+#Correlation
+cor(newcaliforniaschools)
+plot(newcaliforniaschools)
+#ANOVA
+anovaCAschools<-aov(WithoutDTP ~ WithoutPolio + WithoutMMR + WithoutHepB, data = newcaliforniaschools)
+summary(anovaCAschools)
+```
+
+The highest correlation is between without DTP and without Polio at 98.31%.  This means if you don't have DTP, you are 98.31% likely to also not have had a Polio vaccine.The next highest is Without DTP and Without MMR at 97.7%.  This means if you don't have DTP, you are 97.7% likely to also not have had an MMR vaccine.  The third highest is if you don't have polio you won't have MMR at 96.82%.  Either way, the unvaccinated rates in school remains at 5.7%.   The ANOVA shows that with the Sum of Squares for variance that there is more variance between groups and a smaller amount of variance within groups.  There are 696 remaining degrees of freedom.  The only variable that is not significant is WithoutHepB.This is not so surprising as WithoutHepB had the lowest amount of correlation between variables. 
+
+
+#Predictive Analyses:
+(For all of these analyses, use PctChildPoverty, PctFreeMeal, PctFamilyPoverty, Enrolled,  and TotalSchools as predictors. Transform variables as necessary to improve prediction and/or interpretability. In general, if there is a Bayesian version of an analysis available, you are expected to run that analysis in addition to the frequentist version of the analysis.)
+
+## Question 5
+
+What variables predict whether or not a district's reporting was complete?
+ 
+```{r}
+#install.packages("caret")
+library(caret)
+library(BayesFactor)
+caschools<-districts
+str(caschools)
+View(caschools)
+summary(caschools)
+caschools$DistrictComplete<-as.numeric(caschools$DistrictComplete)
+caschools$PctChildPoverty<-caschools$PctChildPoverty/100
+caschools$PctFreeMeal<-caschools$PctFreeMeal/100
+caschools$PctFamilyPoverty<-caschools$PctFamilyPoverty/100
+caschools$PctUpToDate<-caschools$PctUpToDate/100
+caschools$PctBeliefExempt<-caschools$PctBeliefExempt/100
+
+#Linear Regression
+reportinglm<-lm(DistrictComplete ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, family="binomial", data=caschools)
+summary(reportinglm)
+
+#Logistic Regression - All variables
+set.seed(1299)
+sampled <- sample(c(TRUE, FALSE), nrow(caschools), replace = TRUE, prob=c(0.7, 0.3))
+train <- caschools[sampled, ]
+test <- caschools[!sampled, ]
+
+reporting<-glm(DistrictComplete ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, family="binomial", data=train)
+summary(reporting)
+#plot(reporting)
+
+pred<-round(predict(reporting, test, type="response"))
+str(pred)
+real<- as.numeric(test$DistrictComplete)
+
+confusionMatrix(table(real, pred))
+
+#Logistic Regression Best Variables
+reporting1<-glm(DistrictComplete ~ Enrolled + TotalSchools, family="binomial", data=train)
+summary(reporting1)
+#plot(reporting1)
+
+pred<-round(predict(reporting1, test, type="response"))
+str(pred)
+real<- as.numeric(test$DistrictComplete)
+
+confusionMatrix(table(real, pred))
+
+
+```
+
+Before running any models the Percentage Variables that were integers were changed into percentages (PctChildPoverty, PctFreeMeal, PctFamilyPoverty).  This will make interpreting the results easier.
+
+The first model created was a linear model, there was only two variables which were significant and that was Enrolled and TotalSchools.  The R-squared was 0.1037 with an adjusted R-squared of 0.09719.  The F-statistic was 16.05 on 5 with DF of 694.The overall p-value was less than our alpha of 0.05.
+
+Then the model was re-ran using logistic regression.  This resulted in 2 variables being significant (Enrolled, and TotalSchools) along with the Intercept.  The null hypothesis that there is no relationship between DistrictsComplete and the variables. The z-test value of 6.336 and the associated p-value of 2.36e-10 means we reject the null hypothesis as the p-value is lower than our alpha.  The null hypothesis for PctFreeMeal is that there is no relationship between the intercept and PctFreeMeal.  Because our p-value is 0.06057 which is greater than our alpha we fail to reject the hypothesis.  The null hypothesis for PctChildPoverty is that there is no relationship between PctChildPoverty and the intercept.  Because our p-value is 0.29553 which is greater than our alpha we fail to reject the hypothesis.  The null hypothesis for PctFamilyPoverty is that there is no relationship between it and the intercept.  Because our p-value is 0.48946 which is greater than our alpha we fail to reject the hypothesis.  For our variable Enrolled, we reject the null hypothesis that there is no relationship between Enrolled and the intercept because the p-value is 0.02452.  Lastly, our variable of TotalSchools has a p-value of 0.00929 which means we reject the null hypothesis that there is no relationship between it and the intercept.
+
+Because the our DistrictComplete variable is binomial, the logistic regression provides a better model.  It was set to binomial and split the data into training and test data.  After using the training data to create the model, the prediction was created using the test data.  Once the confusion matrix was built the accuracy was calculated to be 90.61% which is better than the linear model which had an R-squared of 0.1037 and an Adjusted R-squared of 0.09719.
+
+Based on the results of significant and insignificant variables - the best predictors were Enrolled and TotalSchools.   
+
+## Question 6
+
+What variables predict the percentage of all enrolled students with completely up-to-date vaccines?
+ 
+```{r}
+#Linear Regression
+uptodate1<-lm(PctUpToDate ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, data=caschools)
+summary(uptodate1)
+
+#Bayes Factor
+bayesuptodate <- lmBF(PctUpToDate ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, data=caschools,posterior=F)
+summary(bayesuptodate)
+```
+
+The F-statistic is 13.97 with a p-value of 5.028e-13 which is below our alpha value of 0.05. This shows there is a
+relationship between PctUpToDate and the variables. The intercept has a t-value of 75.791 and a near 0 p-value. Use of the intercept in our equation is supported.  The PctChildPoverty coefficient is -1.004e-01, has a t-value of -1.271 and a p-value of greater than our alpha of 0.05.  Use of this coefficient in our equation is not supported.  The PctFreeMeal coefficient has t-value of 3.187 and a p-value of 0.001502. This is below the 0.05 alpha. Use of the coefficient in our equation is supported.  The PctFamilyPoverty coefficient has t-value of 2.632 and a p-value of 0.008679. This is below the 0.05 alpha and use of the coefficient in our equation is supported.  The Enrolled coefficient has t-value of 3.352 and a p-value of 0.000847. This is below the 0.05 alpha and use of the coefficient in our equation is supported.  The TotalSchools coefficient has t-value of -3.228 and a p-value of 0.001304. This is below the 0.05 alpha and use of the coefficient in our equation is supported.  Overall, 4 out of the 5 variables are significant and we would reject the null hypothesis that there is no relationship between PctUpToDate and the variables.  For the 1 insignificant variable (PctChildPoverty), we would fail to reject the null hypothesis.
+
+
+Because the linear model has 1 variable that is not statistically significant, the model should be re-ran without it (PctChildPoverty) and see if it performs better.
+
+After running the linear regression, a Bayes Factor was ran.  The result was 5276913702 ±0.01%.  This provides odds in favor of the alternative hypothesis.  We reject the null hypothesis that there is no relationship between PctBeliefExempt and the variables. This supports the alternative hypothesis that there is a relationship between PctBeliefExempt and the variables. This finding agrees with the frequentist finding which showed high correlations between these same variables and a p-value of 9.109e-12 which is below the alpha.
+
+## Question 7
+
+What variables predict the percentage of all enrolled students with belief exceptions?
+ 
+```{r}
+#Linear Regression
+beliefexceptions<-lm(PctBeliefExempt ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, data=caschools)
+summary(beliefexceptions)
+
+#Bayes Factor
+bayesbelief <- lmBF(PctBeliefExempt ~ PctChildPoverty + PctFreeMeal + PctFamilyPoverty + Enrolled + TotalSchools, data=caschools,posterior=F)
+summary(bayesbelief)
+```
+
+The F-statistic is 18.27 with a p-value of < 2.2e-16 which is below our alpha value of 0.05. This shows there is a
+relationship between PctBeliefExempt and the variables. The intercept has a t-value of 13.281 and a near 0 p-value. Use of the intercept in our equation is supported.  The PctChildPoverty coefficient has a t-value of 3.397 and a p-value of 0.000721 which is less than the alpha of 0.05.  Use of this coefficient in our equation is supported.  The PctFreeMeal coefficient has t-value of -5.873 and a p-value of 6.62e-09. This is below the 0.05 alpha. Use of the coefficient in our equation is supported.  The PctFamilyPoverty coefficient has t-value of -3.005 and a p-value of 0.002747. This is below the 0.05 alpha and use of the coefficient in our equation is supported.  The Enrolled coefficient has t-value of -2.020 and a p-value of 0.043811. This is below the 0.05 alpha and use of the coefficient in our equation is supported.  The TotalSchools coefficient has t-value of 1.830 and a p-value of 0.067667. This is above the 0.05 alpha and use of the coefficient in our equation is not supported.  Overall, 4 out of the 5 variables are significant and thus we would reject the null hypothesis that there is no relationship between PctBeliefExempt and the variables.  For the 1 insignificant variable (TotalSchools), we would fail to reject the null hypothesis.
+
+After running the linear regression, a Bayes Factor was ran.  The result was 6.025845e+13 ±0.01%.  This provides odds in favor of the alternative hypothesis.  We reject the null hypothesis that there is no relationship between PctBeliefExempt and the variables. This supports the alternative hypothesis that there is a relationship between PctBeliefExempt and the variables. This finding agrees with the frequentist finding which showed high correlations between these same variables and a p-value of 9.109e-12 which is below the alpha.
+
+
+
+## Question 8
+
+What's the big picture, based on all of the foregoing analyses?  The staff member in the state legislator's office is interested to know how to allocate financial assistance to school districts to improve both their vaccination rates and their reporting compliance.
+
+What have you learned from the data and analyses that might inform this question?
+ 
+First off, vaccine rates in general have trended higher since 1980 year over year with some variability.  Overall, both public and private schools have a completion rate of 94.6% providing vaccine reports.  Private schools have the lowest overall completion rate of 84.7%.  The 2013 rates for individual vaccines in public schools are 98.4% for DTP, Polio, and MMR while HepB is 98.8%.  These rates are higher than the average US vaccination rates for all 4 vaccines.  The largest difference coming from HepB which California has a rate of 98.8% while the US is only at 34.21%.  There are 5.7% of students in California who have not been vaccinated due to a belief exemption.  One reason why California is higher than the rest of the US appears to be because they require all children who attend private or public schools to be vaccinated.  There are several states who offer medical, religious and philosophical exemptions which can cause the overall US rate to decline.
+
+All 3 of the models that were ran, show that there is a relationship between the intercept and some of the variables for each one.  Beginning with predicting DistrictComplete we know that the most significant relationship is between the intercept and variables Enrolled and TotalSchools.  For predicting PctUpToDate, both the frequentist and Bayes Factor show that we reject the null hypothesis that there is no relationship between PctUpToDate and our significant variables (PctFreeMeal, PctFamilyPoverty, Enrolled, and TotalSchools).  For predicting PctBeliefExempt, both the frequentist and Bayes Factor show that we reject the null hypothesis that there is no relationship between PctUpToDate and our significant variables (PctChildPoverty, PctFreeMeal, PctFamilyPoverty, and Enrolled). 
+
+Based on this information it is clear that the priority should be to improve the number of schools who meet vaccination completions.  Until this rate can be improved, there will be incomplete vaccination information which means that children attending schools are vulnerable to be infected.  The analysis shows private schools have the lowest overall completion rate at 84.7%.  Public schools have a higher rate at 98.4%.  In looking at the districts, the analysis shows that higher number of enrolled students and total schools in the district have problems completing reporting mandates.  
+
+It's recommended that the State allocate resources to collect more data and more school information (recent data would most likely reflect an increase in the number of schools).  This will help to understand what is causing the gap between public and private school reporting and help increase the overall total school reporting of vaccinations.  At this point our sample is small and we need more information about the underlying factors of both types of schools as to why they are or are not completing reporting mandates.  One other variable that is not accounted for and should be is children who are home-schooled.  While they do not need to worry about infecting other students, they do need to worry about infecting other family members, some of whom could be students who are not home-schooled.  This can lead to outbreaks of infections happening at schools.
+
+The second recommendation is to shift resources to the districts with the highest enrollment counts.  Districts with the most schools and most students should be used specifically for reporting.  Any other resources such as free meals that take away from efforts to complete reporting should be re-evaluated.  
+
+The third recommendation is to increase vaccination rates.  Schools with higher belief exemption rates lead to having less students vaccinated.  Although this exemption does help with discrimination of students it does increase the risk of other students contracting the disease (even if vaccinated).  There is a clear correlation that if you do not have a DTP vaccine you are unlikely to have the others.  Schools should re-evaluate the exemption policies and the state could allocate money towards changing these policies.  If they can create stricter exemptions or have a no exemption policy, the rates will increase. 
+
+
+## Appendix
+```{r}
+plot.ts(finalVac[,'DTP1'], main = "DTP1 vs Year")
+plot.ts(finalVac[,'HepB_BD'], main = "HepB_BD vs Year")
+plot.ts(finalVac[,'Pol3'], main = "Pol3 vs Year")
+plot.ts(finalVac[,'Hib3'], main = "Hib3 vs Year")
+plot.ts(finalVac[,'MCV1'], main = "MCV1 vs Year")
+
+```
