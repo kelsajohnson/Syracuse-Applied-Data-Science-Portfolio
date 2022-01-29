@@ -1,0 +1,828 @@
+---
+title: "Drone Delivery"
+author: "Michael R. Badding, Leticia J. Spencer, Kelsey A. Johnson"
+date: "11/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Required Packages
+```{r}
+# Load Package Manager (installs packages if not present)
+if (!require("pacman")) install.packages("pacman")
+
+p_load(stringr)
+p_load(ggplot2)
+p_load(tidyverse)
+p_load(dplyr)
+p_load(arules)
+p_load(arulesViz)
+p_load(factoextra)
+p_load(netgen)
+p_load(TSP)
+```
+
+
+# Grabbing .in File
+```{r}
+busy_drone_day <- "C:/Users/mrbad/Desktop/IST 707/DroneDelivery/busy_day.in"
+sim_lines <- readLines(busy_drone_day)
+```
+
+
+# Alternate: Create  .in File
+```{r eval=FALSE, include=FALSE}
+### Note: RUNNING THIS CAN TAKE FOREVER
+### Todo: Add Progress Tracker as hard to debug
+# Forced Seed Set (No need to really run but for repeatable random scenario)
+# Unknown if you have to run the set seed for each runif statement...
+#set.seed(55492220)
+
+# Randomly Produce Simulation Parameters
+srows = round(runif(1,1,10000))
+scols = round(runif(1,1,10000))
+drones = round(runif(1,1,1000))
+deadline = round(runif(1,1,1000000))
+max_load = round(runif(1,1,10000))
+
+randomly_produced_in <- as.character(c(srows, scols, drones, deadline, max_load))
+randomly_produced_in <- append(randomly_produced_in, "\n")
+
+# Randomly Produce Simulation Products
+num_products <- round(runif(1,1,10000))
+pweights <- c()
+
+for (k in 1:num_products) {
+  pweights <- append(pweights, round(runif(1,1,max_load)))
+}
+
+randomly_produced_in <- append(randomly_produced_in, as.character(num_products))
+randomly_produced_in <- append(randomly_produced_in, "\n")
+randomly_produced_in <- append(randomly_produced_in, as.character(pweights))
+randomly_produced_in <- append(randomly_produced_in, "\n")
+
+# Randomly Produce Simulation Warehouses
+num_warehouses <- round(runif(1,1,10000))
+
+randomly_produced_in <- append(randomly_produced_in, num_warehouses)
+randomly_produced_in <- append(randomly_produced_in, "\n")
+
+total_products <- c()
+total_products[1:num_products] <- 0
+
+for (k in 1:num_warehouses) {
+  wr = round(runif(1,0,srows)) # Wrow location
+  wc = round(runif(1,0,scols)) # Wcolumn location
+  
+  randomly_produced_in <- append(randomly_produced_in, as.character(c(wr, wc)))
+  randomly_produced_in <- append(randomly_produced_in, "\n")
+  
+  # Products in Warehouse
+  items <- c()
+  
+  for (i in 1:num_products) {
+    p_amount <- round(runif(1,0,10000))
+    items <- append(items, p_amount)
+    total_products[i] <- total_products[i] + p_amount
+  }
+  
+  randomly_produced_in <- append(randomly_produced_in, as.character(items))
+  randomly_produced_in <- append(randomly_produced_in, "\n")
+}
+
+# Randomly Produce Simulation Customer Orders
+num_orders <- round(runif(1,1,10000))
+
+randomly_produced_in <- append(randomly_produced_in, as.character(num_orders))
+randomly_produced_in <- append(randomly_produced_in, "\n")
+
+if(num_orders * 10000 > sum(total_products)) {
+  parameteradjust = 1
+  adjustment = sum(total_products)/num_orders
+} else {
+  parameteradjust = 0
+}
+
+for (k in 1:num_orders) {
+  cor = round(runif(1,0,srows)) # COrow location
+  coc = round(runif(1,0,scols)) # COcolumn location
+  
+  randomly_produced_in <- append(randomly_produced_in, as.character(c(cor, coc)))
+  randomly_produced_in <- append(randomly_produced_in, "\n")
+  
+  # Products Ordered
+  if (parameteradjust != 1) {
+    num_p_ordered <- round(runif(1,1,10000))
+  } else {
+    num_p_ordered <- round(runif(1,1,adjustment))
+  }
+  
+  oitems <- c()
+  
+  for (i in 1:num_p_ordered) {
+    acquired = 0
+    while (acquired == 0) {
+      op <- round(runif(1,1,num_products))
+      if (total_products[op] != 0) {
+        oitems <- append(oitems, (op - 1))
+        total_products[op] = total_products[op] - 1
+        acquired = 1
+      }
+    }
+  }
+  
+  randomly_produced_in <- append(randomly_produced_in, as.character(num_p_ordered))
+  randomly_produced_in <- append(randomly_produced_in, "\n")
+  
+  randomly_produced_in <- append(randomly_produced_in, as.character(oitems))
+  randomly_produced_in <- append(randomly_produced_in, "\n")
+}
+
+# Saves creation due to long time for generation of random senario
+write(randomly_produced_in, file = "C:/Users/mrbad/Desktop/IST 707/DroneDelivery/random_day.in", sep = " ")
+
+
+
+```
+
+
+# Alternate: Utilize Created .in File
+```{r eval=FALSE, include=FALSE}
+# Simply run this the two in order to run a random scenario
+random_drone_day <- "C:/Users/mrbad/Desktop/IST 707/DroneDelivery/random_day.in"
+sim_lines <- readLines(random_drone_day)
+```
+
+
+# Simulation Parameters
+```{r}
+# 1: Number of Rows
+# 2: Number of Columns
+# 3: Number of Drones
+# 4: Time Deadline
+# 5: Maximum Load
+sim_para <- as.numeric(str_split(sim_lines[1], " ")[[1]])
+names(sim_para) <- c("Rows", "Columns", "NumDrones", "Deadline", "MaxLoad")
+sim_para
+```
+
+
+# Simulation Products
+```{r}
+# Number of Products
+sim_num_products <- as.numeric(str_split(sim_lines[2], " ")[[1]])
+sim_num_products
+
+# Product Weights
+sim_weight_products <- as.numeric(str_split(sim_lines[3], " ")[[1]])
+head(sim_weight_products)
+
+# Product Details Table
+sim_products <- data.frame(0:(sim_num_products-1), sim_weight_products)
+colnames(sim_products) <- c("ProductID", "Weight")
+sim_products$ProductID <- paste("P",sim_products$ProductID, sep = "")
+head(sim_products)
+```
+
+
+# Simulation Warehouses
+```{r}
+# Number of Warehouses
+sim_num_warehouses <- as.numeric(str_split(sim_lines[4], " ")[[1]])
+sim_num_warehouses
+
+# Warehouse Location
+sim_warehouse_location <- data.frame(1:sim_num_warehouses,1:sim_num_warehouses)
+colnames(sim_warehouse_location) <- c("Row", "Column")
+rownames(sim_warehouse_location) <- paste("W", (as.numeric(rownames(sim_warehouse_location)) - 1), sep = "")
+
+for (k in 1:sim_num_warehouses) {
+  sim_warehouse_location[k,] <- as.numeric(str_split(sim_lines[5 + (k * 2 - 2)], " ")[[1]])
+}
+
+head(sim_warehouse_location)
+
+# Warehouse Products
+sim_warehouse_products <- data.frame(matrix(ncol = sim_num_products, nrow = sim_num_warehouses))
+sim_warehouse_products[,] <- 0 
+colnames(sim_warehouse_products) <- sim_products$ProductID
+rownames(sim_warehouse_products) <- paste("W", (as.numeric(rownames(sim_warehouse_products)) - 1), sep = "")
+
+for (k in 1:sim_num_warehouses) {
+  products_stored <- as.numeric(str_split(sim_lines[5 + (k * 2 - 1)], " ")[[1]])
+  
+  for (c in 1:sim_num_products) {
+    sim_warehouse_products[k, c] <- products_stored[c]
+  }
+}
+
+head(sim_warehouse_products)
+
+# Create Final Relevant Warehouse DF
+sim_warehouses <- cbind(sim_warehouse_location, sim_warehouse_products)
+head(sim_warehouses)
+```
+
+
+# Simulation Customer Orders
+```{r}
+# Number of Customer Orders
+sim_num_customerorders <- as.numeric(str_split(sim_lines[5 + sim_num_warehouses*2], " ")[[1]])
+sim_num_customerorders
+
+# Customer Order Locations
+sim_customerorder_location <- data.frame(1:sim_num_customerorders,1:sim_num_customerorders)
+colnames(sim_customerorder_location) <- c("Row", "Column")
+rownames(sim_customerorder_location) <- paste("CO", (as.numeric(rownames(sim_customerorder_location)) - 1), sep = "")
+
+for (k in 1:sim_num_customerorders) {
+  sim_customerorder_location[k,] <- as.numeric(str_split(sim_lines[(6 + sim_num_warehouses*2) + (k * 3 - 3)], " ")[[1]])
+}
+
+head(sim_customerorder_location)
+  
+# Customer Order Number of Products
+sim_customerorder_numberofproducts <- c(1)
+
+for (k in 1:sim_num_customerorders) {
+  sim_customerorder_numberofproducts[k] <- as.numeric(str_split(sim_lines[(6 + sim_num_warehouses*2) + (k * 3 - 2)], " ")[[1]])
+}
+
+head(sim_customerorder_numberofproducts)
+
+# Customer Products Ordered
+sim_customerorder_products <- data.frame(matrix(ncol = sim_num_products, nrow = sim_num_customerorders))
+sim_customerorder_products[,] <- 0 
+colnames(sim_customerorder_products) <- sim_products$ProductID
+rownames(sim_customerorder_products) <- paste("CO", (as.numeric(rownames(sim_customerorder_products)) - 1), sep = "")
+
+for (k in 1:sim_num_customerorders) {
+  products_ordered <- as.numeric(str_split(sim_lines[(6 + sim_num_warehouses*2) + (k * 3 - 1)], " ")[[1]])
+  
+  for (c in 1:length(products_ordered)) {
+    sim_customerorder_products[k, products_ordered[c]+1] <- sim_customerorder_products[k, products_ordered[c]+1] + 1
+  }
+}
+
+head(sim_customerorder_products)
+
+# Create Final Relevant CustomerOrders DF
+sim_customerorders <- cbind(sim_customerorder_location, sim_customerorder_products)
+head(sim_customerorders)
+
+# Check Maximum number of products in an Order
+max(rowSums(sim_customerorders[-c(1,2)]))
+```
+
+
+# Data Exploration
+```{r}
+customerorder_location <-sim_customerorder_location
+warehouse_location <- sim_warehouse_location
+customerorder_location$ID <- as.factor("CO")
+warehouse_location$ID <- as.factor("Warehouse")
+
+locations <- rbind(customerorder_location,warehouse_location)
+
+# Generate Visual Map of Customer Orders
+ggplot(customerorder_location) +
+  aes(x = Column, y = Row) +
+  geom_point(size = 1L, colour = "#0c4c8a") +
+  labs(title = "Location of Customer Orders") +
+  theme_gray() +
+  xlim(0L, sim_para[2]) +
+  ylim(0L, sim_para[1])
+
+locations_W1_Only <- rbind(customerorder_location, warehouse_location[1, ]) 
+
+# Generate Visual Map of Customer Orders and Warehouses
+ggplot(locations) +
+  aes(x = Column, y = Row, colour = ID, size = ID) +
+  geom_point() +
+  scale_color_hue() +
+  labs(title = "Location of Warehouses and Orders") +
+  theme_gray() +
+  xlim(0L, sim_para[2]) +
+  ylim(0L, sim_para[1])
+
+levels(warehouse_location$ID) <- c(levels(warehouse_location$ID), "Warehouse_1")
+warehouse_location$ID[1] <- "Warehouse_1"
+locations_marked <- rbind(customerorder_location,warehouse_location)
+
+# Generate Visual Map of Customer Orders and Marked Warehouses
+ggplot(locations_marked) +
+  aes(x = Column, y = Row, colour = ID, size = ID) +
+  geom_point() +
+  scale_color_hue() +
+  labs(title = "Location of Warehouses (1st Marked) and Orders") +
+  theme_gray() +
+  xlim(0L, sim_para[2]) +
+  ylim(0L, sim_para[1])
+
+# Product Weight
+weights <- data.frame(Weight = sim_weight_products)
+weights$ID <- as.factor("Product_Weight")
+drone_load <- data.frame(Weight = sim_para[5], ID = as.factor("Drone_Load"))
+weight_and_load <- rbind(weights, drone_load)
+
+# Investigate product weight distribution
+ggplot(weight_and_load) +
+ aes(x = Weight, fill = ID) +
+ geom_histogram(bins = 30L) +
+ scale_fill_hue() +
+ labs(x = "Weight Distribution of Products",
+      y = "Count of Products",
+      title = "Distribution of Product Weights in Consideration of Drone Load"
+      ) +
+ theme_gray()
+
+# Investigate product weight distribution boxplot
+ggplot(weights) +
+ aes(x = "", y = Weight) +
+ geom_boxplot(fill = "#0c4c8a") +
+ labs(x = "Products", title = "Distribution of Product Weights") +
+ theme_gray()
+
+# Investigate product weight distribution density
+ggplot(weights) +
+ aes(x = Weight) +
+ geom_density(adjust = 1L, fill = "#0c4c8a") +
+ labs(title = "Product Weight Distribution") +
+ theme_minimal()
+```
+
+
+# Clustering
+```{r}
+# Remove Row and Column Columns
+co_df <- sim_customerorders[-c(1:2)]
+
+customerorders_matrix=as.matrix(co_df)
+str(customerorders_matrix)
+m  <- customerorders_matrix
+
+# m <- [1:2, 1:3]
+distMatrix_E <- dist(m, method="euclidean")
+#print(distMatrix_E)
+distMatrix_M<-dist(m, method="manhattan")
+#print(distMatrix_M)
+
+#--------------   k means clustering -----------------------------
+X <- m
+## Remember that kmeans uses a matrix of ONLY NUMBERS
+## We have this so we are OK.
+## Manhattan gives the best vis results!
+distance1 <- get_dist(X,method = "manhattan")
+fviz_dist(distance1, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+distance2 <- get_dist(X,method = "pearson")
+fviz_dist(distance2, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+distance3 <- get_dist(X,method = "canberra")
+fviz_dist(distance3, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+distance4 <- get_dist(X,method = "spearman")
+fviz_dist(distance4, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+
+## Next, our current matrix does NOT have the columns as the docs
+## so we need to transpose it first....
+## Run the following twice...
+X <- t(X)
+## Now scale the data
+#X <- scale(X)
+str(X)
+## k means
+kmeansFIT_1 <- kmeans(X,centers=4)
+#(kmeansFIT1)
+summary(kmeansFIT_1)
+#(kmeansFIT_1$cluster)
+fviz_cluster(kmeansFIT_1, data = X)
+
+kmeansFIT_2<-kmeans(X,centers=3)
+#(kmeansFIT_2)
+summary(kmeansFIT_2)
+#(kmeansFIT_2$cluster)
+fviz_cluster(kmeansFIT_2, data = X)
+
+# k-means clustering for 7 centers
+kmeansFIT_3<-kmeans(X,centers=7)
+#(kmeansFIT_3)
+summary(kmeansFIT_3)
+#(kmeansFIT_3$cluster)
+fviz_cluster(kmeansFIT_3, data = X)
+
+kmeansFIT_4<-kmeans(X,centers=2)
+#(kmeansFIT_4)
+summary(kmeansFIT_4)
+#(kmeansFIT_4$cluster)
+fviz_cluster(kmeansFIT_4, data = X)
+```
+
+
+# Assocation Rule Mining
+```{r}
+# Generate item lists for each customer order
+apriori_df <- data.frame(matrix(ncol = sim_num_products, nrow = nrow(co_df)))
+
+for (r in 1:sim_num_customerorders) {
+  k = 1
+  for (c in 1:sim_num_products) {
+    if (co_df[r, c] != 0) {
+      apriori_df[r, k] <- colnames(co_df)[c]
+      k = k + 1
+    }
+  }
+}
+
+# To transform data into transaction format
+write.table(apriori_df, file = "producttransactions.csv", col.names = FALSE, 
+            row.names = FALSE, sep = ",")
+ProductTrans <- read.transactions("producttransactions.csv", sep =",", 
+            format("basket"),  rm.duplicates = TRUE)
+inspect(head(ProductTrans))
+
+
+# Generate rules
+rules <- apriori(ProductTrans, parameter = list(supp = 0.001, confidence = 0.9, maxlen = 3))
+
+# Show the rules, but only 2 digits
+options(digits=2)
+inspect(rules)
+
+# Get summary info
+summary(rules)
+
+# Sorting Rules
+rules<-sort(rules, by="lift", decreasing=TRUE)
+
+# Inspecting first 100 rules by lift
+options(digits=2)
+rules100 <- rules[1:100]
+inspect(rules100)
+
+# Visualizing the rules
+plot(rules[1:50], method = "graph",engine = "interactive", measure = "support", shading = "lift")
+
+plot(rules100, method = "graph",engine = "interactive", measure = "support", shading = "lift")
+
+# Check for rules under 1 confidence
+sum(quality(rules)$confidence < 0.999999)
+
+#grouped matrix based visualization look into more
+#plot(rules, method = "grouped", engine = "interactive")
+
+# Graph based visualizations
+subrules<-rules[1:10]
+plot(subrules, method = "graph")
+
+# Save much more interactive graph 
+saveAsGraph(head(rules, n = 100, by = "lift"), file = "rules.graphml")
+```
+
+
+# Drone Attributes
+```{r}
+drone_status <- data.frame(matrix(ncol = (sim_num_products + 8), nrow = sim_para[3]))
+colnames(drone_status) <- c("Row", "Column", "Weight", "Max_Load", "Destinations", "Origin", "Command", "CommandTurnsLeft", paste("P", (1:sim_num_products -1), sep = ""))
+rownames(drone_status) <- paste("D", (as.numeric(rownames(drone_status)) - 1), sep = "")
+drone_status$Row <- sim_warehouses[1, ]$Row
+drone_status$Column <- sim_warehouses[1, ]$Column
+drone_status$Weight <- 0
+drone_status$Max_Load <- sim_para[5]
+drone_status$Origin <- "W0"
+drone_status$Command <- "None"
+drone_status$Destinations <- "None"
+drone_status$CommandTurnsLeft <- 0 
+drone_status[9:(sim_num_products+8)] <- 0
+
+head(drone_status)
+```
+
+
+# Drone Optimization Functions
+```{r include = FALSE}
+# Check weight limits
+weight_check <- function(drone_w, weight, dmax) {
+  if ((drone_w + weight) > dmax) {
+    return(FALSE)
+  }
+  else {
+    return(TRUE)
+  }
+}
+
+# # Check for product availability
+# availability_check <- function(warehouse, product) {
+#   print(warehouse)
+#   print(warehouse[product])
+#   if (warehouse[product][,1] != 0) {
+#     return(TRUE)
+#   }
+#   else {
+#     return(FALSE)
+#   }
+# }
+
+# Euclidean Distance Matrix Function
+EUC_distance <- function(coordinates, num_warehouses) {
+  ### For creating a distance matrix from provided coordinates and the number
+  ### of warehouses is required for naming purposes
+  
+  # Establish distance matrix
+  distance <- data.frame(matrix(ncol = nrow(coordinates), nrow = nrow(coordinates)))
+  distance[,] <- 0
+  
+  # Establish proper Column and Row Names
+  matrixnames <- c(paste("W", (0:(num_warehouses-1)), sep = ""),
+                   paste("CO", (0:(nrow(coordinates)-num_warehouses-1)), sep = ""))
+  colnames(distance) <- matrixnames
+  rownames(distance) <- matrixnames
+  
+  # Iterate through distance matrix filling in euclidean distances
+  for (r in 1:nrow(coordinates)) {
+    for (c in 1:nrow(coordinates)) {
+      distance[r, c] <- ceiling(sqrt((coordinates[r, 1] - coordinates[c, 1])^2 +
+                                  (coordinates[r, 2] - coordinates[c, 2])^2))
+    }
+  }
+  
+  # Return distance matrix
+  return(distance)
+}
+
+# Load Product at Warehouse
+Load <- function(drone, warehouse, p_id, p_num, commands) {
+  # Add Load command to commands
+  commands <- append(commands, str_glue(drone, "L", str_sub(warehouse, 2), str_sub(p_id, 2), p_num, .sep = " "))
+  
+  # Return adjusted commands
+  return(commands)
+}
+
+# Deliver Product to Customer Order
+Deliver <- function(drone, order, p_id, p_num, commands) {
+  # Add Deliver command to commands
+  commands <- append(commands, str_glue(drone, "D", str_sub(order, 2), str_sub(p_id, 2), p_num, .sep = " "))
+  
+  # Return adjusted commands
+  return(commands)
+}
+
+# Unload Product at Warehouse
+Unload <- function(drone, warehouse, p_id, p_num, commands) {
+  # Add Unload command to commands
+  commands <- append(commands, str_glue(drone, "U", str_sub(warehouse, 2), str_sub(p_id, 2), p_num, .sep = " "))
+  
+  # Return adjusted commands
+  return(commands)
+}
+  
+# Make Drone Wait
+Wait <- function(drone, turns, commands) {
+  # Add Wait command to commands
+  commands <- append(commands, str_glue(drone, "W", turns, .sep = " "))
+  
+  # Return adjusted commands
+  return(commands)
+}
+
+# Optimization of VRP
+optimize_drones <- function(drones, warehouses, orders, products,
+                            scenario_parameters, algorithm,
+                            use_seed = TRUE, seed = 12112098) {
+  ## drones = Dataframe of Drone attributes with each row a drone
+  ## warehouses = Dataframe of warehouses with first two columns location and
+  ## the rest of the columns are the number of that specific product stocked
+  ## orders = Dataframe of customer orders with location and number of each
+  ## product requested in the order
+  ## scenario_parameters = the parameters of the scenario like deadline
+  ## algorithm = string of algorithm to be run like "by_warehouse"
+  ## use_seed = should seed be used for ensuring result is reproducible
+  ## Can be set to False for running multiple random results
+  ## seed = Default is 184251
+  
+  ### Algorithm Explanations:
+  ### by_drone: Assigns orders to drones by shortest distance to completion
+  ### a brute force approach that doesn't really optimize
+  
+  ### There were more algorithms but they had to be removed in order to create
+  ### a finished product.
+
+  ### More specific algorithms can be added that might utilize Wait and Unload...
+  
+  
+  # Establish Coordinates and distance matrix
+  coords <- as.matrix(rbind(warehouses[1:2], orders[1:2]))
+  distances <- EUC_distance(coords, nrow(warehouses))
+  # Generate Plots for Overview
+  # Netgen Package:
+  #network <- makeNetwork(coords, depot.coordinates = coords[1:10,])
+  #autoplot(network)
+  
+  # TSP Package:
+  #drone_etsp <- ETSP(coords, labels = rownames(coords))
+  #drone_tour <- solve_TSP(drone_etsp)
+  #plot(drone_etsp, drone_tour, tour_col = "blue")
+  
+  #coord_path <- c(rep("", scenario_parameters["NumDrones"]))
+  
+  score <- 0
+  commands <- c()
+  orders_rem <- rownames(orders)
+  orderdistance <- distances[orders_rem,]
+  waredistance <- distances[rownames(warehouses)]
+  
+  # Deadline calculation
+  for (t in 1:scenario_parameters["Deadline"]) {
+    # Tracker for Progress
+    if((t %% ceiling(scenario_parameters["Deadline"]*0.01)) == 0) {
+      cat("Optmization Run: ", round(t/scenario_parameters["Deadline"]*100, 2), "%","\n", sep = "")
+    }
+    
+    # Algorithm Decider
+    if (algorithm == "by_drone") {
+      # Check if Command needs to be issued
+      if (sum(drones$CommandTurns == 0) > 0) {
+        # Go through Drones
+        for (d in 1:nrow(drones)) {
+          # Check first for drones with followup commands
+          if (drones[d,]$CommandTurns == 0 && length(orders_rem) != 0) {
+            # Alter and issue commands
+            if (drones[d,]$Command == "None" || drones[d,]$Command == "Deliver") {
+              drones[d,]$Command <- "Load"
+              
+              # Get closest remaining order
+              osorteddistances <- unique(sort(distances[(nrow(warehouses)+1):nrow(distances), drones[d,]$Origin]))
+              remaining = FALSE
+              o = 1
+              
+              while (remaining != TRUE) {
+                lsordertba <- rownames(orderdistance[orderdistance[drones[d,]$Origin] == osorteddistances[o],])
+                if (sum(lsordertba == orders_rem) > 0) {
+                  remaining = TRUE
+                  ordertba = lsordertba[1]
+                }
+                else {
+                  o = o + 1
+                }
+              }
+              
+              # Set new order destination
+              drones[d,]$Destinations <- ordertba
+              
+              # Get closest warehouse
+              warehousetba <- rownames(distances[
+                (distances[,drones[d,]$Destinations] == 
+                min(distances[1:nrow(warehouses),drones[d,]$Destinations])),])
+              
+              wsorteddistances <- unique(sort(distances[1:nrow(warehouses), drones[d,]$Destinations]))
+
+              lswaretba <- colnames(waredistance[waredistance[drones[d,]$Origin] == wsorteddistances[1],])
+              warehousetba = lswaretba[1]
+              
+              # Get list of products in order
+              productstbd <- colnames(orders[,orders[ordertba,] >= 1])[-c(1,2)]
+              productsloaded <- c()
+              
+              # Run through products checking for availability and weight limits
+              for (p in productstbd) {
+                if (weight_check(drones[d,]$Weight,
+                                 (products[products == p,2] * orders[ordertba,p]),
+                                 drones[d,]$Max_Load)) {
+                  warehousetba = lswaretba[1]
+                  if (warehouses[warehousetba,p] != 0) {
+                    # Call Load Command
+                    productsloaded <- append(productsloaded, p)
+                    commands <- Load(d - 1,warehousetba,p,orders[ordertba,p],commands)
+                    drones$CommandTurns[d] <- drones[d,]$CommandTurns + distances[warehousetba, drones[d,]$Origin] + 1
+                    warehouses[warehousetba,p] <- warehouses[warehousetba,p] - orders[ordertba,p]
+                  }
+                  else {
+                    # If initial warehouse doesn't have it check the rest
+                    k = 2
+                    located = FALSE
+                    while (located != TRUE) {
+                      warehousetba <- lswaretba[k]
+                      if(warehouses[warehousetba,p] != 0) {
+                        # Call Load Command
+                        productsloaded <- append(productsloaded, p)
+                        commands <- Load(d - 1,warehousetba,p,orders[ordertba,p],commands)
+                        drones$CommandTurns[d] <- drones[d,]$CommandTurns + distances[warehousetba, drones[d,]$Origin] + 1
+                        warehouses[warehousetba,p] <- warehouses[warehousetba,p] - orders[ordertba,p]
+                        located = TRUE
+                      }
+                      k = k + 1
+                    }
+                  }
+                }
+              }
+              
+              # Give Delivery Commands
+              drones[d,]$Command <- "Deliver"
+              
+              for (p in productsloaded) {
+                commands <- Deliver(d - 1,ordertba, p, orders[ordertba,p], commands)
+                orders[ordertba,p] <- orders[ordertba,p] - orders[ordertba,p]
+                drones$CommandTurns[d] <- drones$CommandTurns[d] + 1
+              }
+              
+              drones$CommandTurns[d] <- drones[d,]$CommandTurns + distances[warehousetba, ordertba]
+              
+              # Add to score
+              dt <- scenario_parameters["Deadline"]
+              score <- score + ceiling(dt - (t + drones$CommandTurns[d])/dt)
+              
+              # Adjust Available orders
+              if (length(productsloaded) == length(productstbd)) {
+                orders_rem <- orders_rem[orders_rem != ordertba]
+              }
+              
+              drones$Origin[d] <- ordertba
+            }
+          }
+          
+          # Time has passed reduce command turns remaining
+          drones[d,]$CommandTurns <- drones[d,]$CommandTurns - 1
+        }
+      }
+    }
+    ## Additional Algorithm Attempt
+    # else if (algorithm == "by_product") {
+    #   # Check if Command needs to be issued
+    #   if (sum(drones$CommandTurns == 0) > 0) {
+    #     # Go through Drones
+    #     for (d in nrow(drones)) {
+    #       # Check first for drones with followup commands
+    #       if(drones[d,]$CommandTurns == 0) {
+    #         # Alter Commands Accordingly
+    #         if (length(drones[d,]$Destinations) <= 1) {
+    #           orders_rem[1]
+    #           if ()
+    #           Load()
+    #           drones[d,]$Command <- "Deliver"
+    #           drones[d,]$CommandTurns <- distances
+    #           drones[d,]$Destinations <- "None"
+    #         }
+    #         else {
+    #           
+    #           drones[d,]$Destinations[1]
+    #           drones[d,]$Destinations <- drones[d,]$Destinations[2:length(drones[d,]$Destinations)]
+    #         }
+    #       }
+    #       else if (drones[d,]$CommandTurns == 0) {
+    #         distances["W0"]
+    #         orders_rem[1]
+    #         drones[d,]$Command <- "Load"
+    #         
+    #       }
+    #     }
+    #   }
+    # }
+    
+  }
+  
+  cat("Scenario Score: ",score)
+  
+  return(commands)
+}
+```
+
+
+# Run VRP Optimization
+```{r}
+commands <- optimize_drones(drone_status, sim_warehouses, sim_customerorders,
+                            sim_products, sim_para, "by_drone")
+
+commands <- c(as.character(length(commands)), commands)
+
+write(commands, file = "C:/Users/mrbad/Desktop/IST 707/DroneDelivery/submission.in", sep = "")
+```
+
+
+# Visualizing Optimization
+```{r eval = FALSE, include = FALSE}
+# This has a bit of issues that still need to be worked out to be able to graph
+submission <- read_csv("C:/Users/mrbad/Desktop/IST 707/DroneDelivery/submission.in", col_names = FALSE)
+dronesGraphData <- data.frame(0:29, "")
+commanddata <- data.frame(2:as.numeric(submission[1,1]),2:as.numeric(submission[1,1]),
+                          2:as.numeric(submission[1,1]),2:as.numeric(submission[1,1]),
+                          2:as.numeric(submission[1,1]))
+
+for (c in 2:as.numeric(submission[1,1])) {
+  commanddata[c - 1,] <- str_split(submission[c,], " ")[[1]]
+}
+
+colnames(commanddata) <- c("drone", "com", "loc", "pr", "am")
+
+
+# coords <- as.matrix(sim_customerorders[as.numeric(commanddata[commanddata$drone == "0"]$loc)+1, 1:2])
+# drone_etsp <- ETSP(coords, labels = rownames(coords))
+# drone_tour <- solve_TSP(drone_etsp)
+# 
+# # Plot the Euclidean TSP and the solved route
+# plot(drone_etsp, drone_tour, tour_col = "blue")
+
+```
+
+
